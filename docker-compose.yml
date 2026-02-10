@@ -1,0 +1,65 @@
+# E-Commerce Catalog Service
+# ===========================
+# Contains: catalog-service (Go), catalog-seed
+#
+# Note: This service depends on ecomm-core's postgres, redis, and shared network.
+# Make sure ecomm-core is running first, or use the root docker-compose.yml
+#
+# Usage:
+#   Start service:        docker compose up -d
+#   View logs:            docker compose logs -f catalog-service
+#   Seed data:            docker compose up catalog-seed
+#   Stop service:         docker compose down
+
+services:
+  catalog-service:
+    build:
+      context: .
+      dockerfile: services/catalog-service/Dockerfile
+    container_name: ecomm-catalog-service
+    environment:
+      REDIS_URL: redis://ecomm-redis:6379
+      POSTGRES_HOST: ecomm-postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      PORT: 8022
+      DATABASE_URL: postgresql://postgres:postgres@ecomm-postgres:5432/catalog
+      OTEL_SDK_DISABLED: "true"
+    ports:
+      - "8022:8022"
+    healthcheck:
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      test:
+        - CMD
+        - wget
+        - --quiet
+        - --tries=1
+        - --spider
+        - http://127.0.0.1:8022/health
+    networks:
+      - ecomm-network
+    restart: unless-stopped
+
+  catalog-seed:
+    build:
+      context: .
+      dockerfile: services/catalog-service/Dockerfile
+    container_name: ecomm-catalog-seed
+    depends_on:
+      catalog-service:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@ecomm-postgres:5432/catalog
+    entrypoint: ["/app/catalog-seed"]
+    command: ["-csv", "/app/data/seed/sample-ecommerce-data.csv", "-limit", "100"]
+    networks:
+      - ecomm-network
+
+networks:
+  ecomm-network:
+    external: true
+    name: cross-repo-demo-core_ecomm-network
