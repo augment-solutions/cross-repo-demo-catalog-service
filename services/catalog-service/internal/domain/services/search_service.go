@@ -14,11 +14,11 @@ import (
 
 // SearchResult represents a search result
 type SearchResult struct {
-	Products    []*models.Product  `json:"products"`
-	Total       int64              `json:"total"`
-	Took        int64              `json:"took_ms"`
-	Facets      map[string][]Facet `json:"facets,omitempty"`
-	Suggestions []string           `json:"suggestions,omitempty"`
+	Products    []*models.ProductDetailsResponse `json:"products"`
+	Total       int64                            `json:"total"`
+	Took        int64                            `json:"took_ms"`
+	Facets      map[string][]Facet               `json:"facets,omitempty"`
+	Suggestions []string                         `json:"suggestions,omitempty"`
 }
 
 // Facet represents a search facet
@@ -80,7 +80,7 @@ func (s *SearchService) Search(ctx context.Context, opts *SearchOptions) (*Searc
 	otel.SearchLatency.Record(ctx, float64(took))
 
 	return &SearchResult{
-		Products: products,
+		Products: models.NewProductDetailsResponses(products),
 		Total:    total,
 		Took:     took,
 	}, nil
@@ -239,4 +239,3 @@ func (s *SearchService) GetFacets(ctx context.Context, categoryID string) (map[s
 	// For now, return empty facets as placeholder
 	return map[string][]Facet{}, nil
 }
-

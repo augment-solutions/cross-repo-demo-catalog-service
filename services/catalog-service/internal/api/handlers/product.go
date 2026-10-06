@@ -47,7 +47,7 @@ func (h *ProductHandler) Create(c *gin.Context) {
 
 	otel.ProductsCreated.Add(ctx, 1)
 	span.SetAttributes(attribute.String("product_id", product.ID.String()))
-	c.JSON(http.StatusCreated, product)
+	c.JSON(http.StatusCreated, models.NewProductDetailsResponse(product))
 }
 
 // Get retrieves a product by ID
@@ -68,7 +68,7 @@ func (h *ProductHandler) Get(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, product)
+	c.JSON(http.StatusOK, models.NewProductDetailsResponse(product))
 }
 
 // List lists products with pagination
@@ -104,7 +104,7 @@ func (h *ProductHandler) List(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"items":      products,
+		"items":      models.NewProductDetailsResponses(products),
 		"total":      total,
 		"page":       page,
 		"page_size":  pageSize,
@@ -135,7 +135,7 @@ func (h *ProductHandler) Update(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, product)
+	c.JSON(http.StatusOK, models.NewProductDetailsResponse(product))
 }
 
 // Delete soft deletes a product
@@ -171,5 +171,5 @@ func (h *ProductHandler) GetBySKU(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, product)
+	c.JSON(http.StatusOK, models.NewProductDetailsResponse(product))
 }

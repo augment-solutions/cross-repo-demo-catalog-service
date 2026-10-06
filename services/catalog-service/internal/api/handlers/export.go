@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ecomm-stack/catalog-service/internal/domain/models"
 	"github.com/ecomm-stack/catalog-service/internal/domain/services"
 	"github.com/ecomm-stack/catalog-service/internal/otel"
 	"github.com/gin-gonic/gin"
@@ -69,7 +70,7 @@ func (h *ExportHandler) Export(c *gin.Context) {
 		h.exportCSV(c, products)
 	case "json":
 		c.Header("Content-Type", "application/json")
-		c.JSON(http.StatusOK, products)
+		c.JSON(http.StatusOK, models.NewProductDetailsResponses(products))
 	case "xml":
 		c.Header("Content-Type", "application/xml")
 		c.XML(http.StatusOK, products)
@@ -147,4 +148,3 @@ func (h *ExportHandler) exportCSV(c *gin.Context, products interface{}) {
 	// CSV export implementation
 	c.String(http.StatusOK, "sku,name,description,price,status\n")
 }
-

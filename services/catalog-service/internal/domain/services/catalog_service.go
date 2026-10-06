@@ -76,7 +76,7 @@ func (s *CatalogService) GetProduct(ctx context.Context, id uuid.UUID) (*models.
 
 // enrichProduct adds category and brand info
 func (s *CatalogService) enrichProduct(ctx context.Context, product *models.Product) (*models.ProductResponse, error) {
-	response := &models.ProductResponse{Product: product}
+	response := &models.ProductResponse{Product: models.NewProductDetailsResponse(product)}
 
 	if product.CategoryID != nil {
 		category, err := s.categoryRepo.GetByID(ctx, *product.CategoryID)
@@ -161,4 +161,3 @@ func (s *CatalogService) RefreshCache(ctx context.Context, productID uuid.UUID) 
 	}
 	return s.productCache.Delete(ctx, productID)
 }
-
