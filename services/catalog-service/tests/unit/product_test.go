@@ -2,7 +2,9 @@ package unit
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/ecomm-stack/catalog-service/internal/domain/models"
 	"github.com/google/uuid"
@@ -142,6 +144,115 @@ func TestProduct_Variants(t *testing.T) {
 	assert.True(t, product.Variants[0].IsDefault)
 }
 
+func TestProductDetailsResponse_Pricing(t *testing.T) {
+	first := models.Variant{SKU: "FIRST", Price: 19.99, CompareAtPrice: 24.99, CostPrice: 10}
+	defaultVariant := models.Variant{SKU: "DEFAULT", Price: 29.99, CompareAtPrice: 39.99, CostPrice: 15, IsDefault: true}
+	tests := []struct {
+		name     string
+		variants []models.Variant
+		pricing  models.ProductPricing
+	}{
+		{"default variant", []models.Variant{first, defaultVariant}, models.ProductPricing{Price: 29.99, CompareAtPrice: 39.99, CostPrice: 15}},
+		{"first variant fallback", []models.Variant{first}, models.ProductPricing{Price: 19.99, CompareAtPrice: 24.99, CostPrice: 10}},
+		{"first default wins", []models.Variant{defaultVariant, {Price: 99, IsDefault: true}}, models.ProductPricing{Price: 29.99, CompareAtPrice: 39.99, CostPrice: 15}},
+		{"zero-valued default", []models.Variant{first, {IsDefault: true}}, models.ProductPricing{}},
+		{"no variants", nil, models.ProductPricing{}},
+		{"empty variants", []models.Variant{}, models.ProductPricing{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			product := &models.Product{ID: uuid.New(), Name: "Test Product", Variants: tt.variants}
+			response := models.NewProductDetailsResponse(product)
+			assert.Equal(t, tt.pricing, response.Pricing)
+			assert.Equal(t, product.Variants, tt.variants)
+
+			data, err := json.Marshal(response)
+			if !assert.NoError(t, err) {
+				return
+			}
+			var body map[string]interface{}
+			if !assert.NoError(t, json.Unmarshal(data, &body)) {
+				return
+			}
+			assert.Equal(t, product.ID.String(), body["id"])
+			assert.Equal(t, product.Name, body["name"])
+			assert.Equal(t, map[string]interface{}{
+				"price": tt.pricing.Price, "compare_at_price": tt.pricing.CompareAtPrice, "cost_price": tt.pricing.CostPrice,
+			}, body["pricing"])
+			for _, field := range []string{"price", "compare_at_price", "cost_price"} {
+				assert.NotContains(t, body, field)
+			}
+			if tt.variants == nil {
+				assert.Nil(t, body["variants"])
+			} else {
+				variants := body["variants"].([]interface{})
+				assert.Len(t, variants, len(tt.variants))
+				for i, variant := range variants {
+					fields := variant.(map[string]interface{})
+					assert.Equal(t, tt.variants[i].SKU, fields["sku"])
+					for _, field := range []string{"price", "compare_at_price", "cost_price"} {
+						assert.NotContains(t, fields, field)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestProductDetailsResponse_PreservesVariantDetailsAndStorage(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	variant := models.Variant{
+		ID: uuid.New(), ProductID: uuid.New(), SKU: "TEST-VAR", Name: "Blue",
+		Price: 29.99, CompareAtPrice: 39.99, CostPrice: 15, Weight: 1.5, Barcode: "12345",
+		IsDefault: true, IsActive: true, SortOrder: 2, ImageURL: "https://example.com/blue.png",
+		Options:      []models.VariantOption{{ID: uuid.New(), OptionName: "Color", OptionValue: "Blue"}},
+		InventoryQty: 7, CreatedAt: now, UpdatedAt: now, DeletedAt: &now,
+	}
+	product := &models.Product{Variants: []models.Variant{variant}}
+	responseJSON, err := json.Marshal(models.NewProductDetailsResponse(product))
+	if !assert.NoError(t, err) {
+		return
+	}
+	storageJSON, err := json.Marshal(product)
+	if !assert.NoError(t, err) {
+		return
+	}
+	var responseBody, storageBody map[string]interface{}
+	assert.NoError(t, json.Unmarshal(responseJSON, &responseBody))
+	assert.NoError(t, json.Unmarshal(storageJSON, &storageBody))
+	responseVariant := responseBody["variants"].([]interface{})[0].(map[string]interface{})
+	storageVariant := storageBody["variants"].([]interface{})[0].(map[string]interface{})
+	for _, field := range []string{"price", "compare_at_price", "cost_price"} {
+		assert.Contains(t, storageVariant, field)
+		delete(storageVariant, field)
+	}
+	assert.Equal(t, storageVariant, responseVariant)
+	assert.NotContains(t, storageBody, "pricing")
+	var restored models.Product
+	assert.NoError(t, json.Unmarshal(storageJSON, &restored))
+	assert.Equal(t, product, &restored)
+}
+
+func TestProductDetailsResponses_ListAndEnrichment(t *testing.T) {
+	assert.Nil(t, models.NewProductDetailsResponse(nil))
+	assert.Nil(t, models.NewProductDetailsResponses(nil))
+	assert.NotNil(t, models.NewProductDetailsResponses([]*models.Product{}))
+	product := &models.Product{Variants: []models.Variant{{Price: 29.99}}}
+	responses := models.NewProductDetailsResponses([]*models.Product{product, nil})
+	assert.Len(t, responses, 2)
+	assert.Equal(t, 29.99, responses[0].Pricing.Price)
+	assert.Nil(t, responses[1])
+
+	enriched := models.ProductResponse{Product: responses[0]}
+	data, err := json.Marshal(enriched)
+	if !assert.NoError(t, err) {
+		return
+	}
+	var body map[string]interface{}
+	assert.NoError(t, json.Unmarshal(data, &body))
+	assert.Contains(t, body["product"], "pricing")
+}
+
 func validateProduct(p *models.Product) error {
 	if p.SKU == "" {
 		return assert.AnError
@@ -151,4 +262,3 @@ func validateProduct(p *models.Product) error {
 	}
 	return nil
 }
-
